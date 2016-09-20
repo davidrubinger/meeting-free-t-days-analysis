@@ -62,3 +62,8 @@ events <- bind_rows(lapply(events_list_all, data.frame,
                select(., contains('is_ext_attendee'))) > 0,
            is_vacation = rowSums(
                select(., contains('is_vacation_attendee'))) > 0)
+
+# Internal meetings
+int_mtgs <- events %>%
+    filter(!(is.na(attendees.email) | is_ext_mtg | is_vacation)) %>%
+    distinct(id, .keep_all = TRUE)

@@ -26,13 +26,28 @@ events_list_all <- NULL
 for (i in 1:length(cals)) {
     print(paste('Reading calendar', cals[i], '...'))
     req <- GET(paste0('https://www.googleapis.com/calendar/v3/calendars/',
-                      cals[i], '/events?maxResults=1e6'),
+                      cals[i], '/events?maxResults=2500&orderBy=startTime&',
+                      'singleEvents=true'),
                config(token = google_token))
     events_list <- lapply(content(req)$items,
                           function (x) {
                               x[['calendar']] <- cals[i]
                               x})
     events_list_all <- append(events_list_all, events_list)
+    
+    # If there's more than one page of results
+    while (!is.null(content(req)$nextPageToken)) {
+        req <- GET(paste0('https://www.googleapis.com/calendar/v3/calendars/',
+                          cals[i], '/events?maxResults=2500&orderBy=startTime&',
+                          'singleEvents=true&pageToken=',
+                          content(req)$nextPageToken),
+                   config(token = google_token))
+        events_list <- lapply(content(req)$items,
+                              function (x) {
+                                  x[['calendar']] <- cals[i]
+                                  x})
+        events_list_all <- append(events_list_all, events_list)
+    }
 }
 
 #### Tidying Data ####

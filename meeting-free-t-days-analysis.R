@@ -75,8 +75,12 @@ events <- bind_rows(lapply(events_list_all, data.frame,
            day_of_week = weekdays(start_time),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
-           is_vacation = rowSums(
-               select(., contains('is_vacation_attendee'))) > 0)
+           has_vacation_attendee = rowSums(
+               select(., contains('is_vacation_attendee'))) > 0,
+           has_vacation_location = ifelse(
+               is.na(location) | location != 'Vacations', FALSE, TRUE),
+           is_vacation = ifelse(has_vacation_attendee | has_vacation_location,
+                                TRUE, FALSE))
 
 # Internal meetings
 int_mtgs <- events %>%

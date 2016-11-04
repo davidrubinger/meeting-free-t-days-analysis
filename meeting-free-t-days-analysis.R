@@ -1,3 +1,4 @@
+# Using R version 3.3.2
 setwd('~/Documents/meeting-free-t-days-analysis')
 library(httr)
 library(dplyr)
@@ -51,6 +52,53 @@ for (i in 1:length(cals)) {
 }
 
 #### Tidying Data ####
+list_element_to_df <- function (list_elements, element) {
+    if (element == 'attendees') {
+        list_elements <- lapply(list_elements, function (x) {
+            if (is.null(x[['attendees']]))
+                x[['attendees']][[1]] <- list(email = NA)
+            x
+        })
+        list_element <- lapply(list_elements, function (x) {
+            lapply(x[['attendees']], function (y) y[['email']])
+        })
+        for (i in 1:length(list_element)) {
+            names(list_element[[i]]) <- paste(
+                'attendee', seq(length(list_element[[i]])), sep = '_')
+        }
+    } else if (element %in% c('organizer', 'creator')) {
+        list_elements <- lapply(list_elements, function (x) {
+            if (is.null(x[[element]]))  x[[element]] <- NA
+            x
+        })
+        list_element <- lapply(list_elements, function (x) x[[element]])
+        list_element <- lapply(list_element, function (x) {
+            if (is.na(x[[1]]))  x <- list(email = NA)
+            x
+        })
+    } else {
+        list_elements <- lapply(list_elements, function (x) {
+            if (is.null(x[[element]]))  x[[element]] <- NA
+            x
+        })
+        list_element <- lapply(list_elements, function (x) x[[element]])
+    }
+    df_element <- bind_rows(lapply(list_element, as_data_frame))
+    names(df_element) <- gsub('_value', '',
+                              paste(element, names(df_element), sep = '_'))
+    df_element
+}
+
+# Binding list together into data frame
+features <- c('start', 'end', 'summary', 'description', 'location',
+              'organizer', 'creator', 'calendar', 'id', 'recurringEventId',
+              'attendees')
+events_df <- NULL
+for (i in 1:length(features)) {
+    events_df <- bind_cols(
+        events_df, list_element_to_df(events_list_all, features[i]))
+}
+
 is_ext_attendee <- function (attendee) {
     int_domains <- c('polar.me', 'polarmobile.com')
     !(grepl(paste(int_domains, collapse = '|'), attendee) | is.na(attendee))
@@ -59,20 +107,17 @@ is_vacation_attendee <- function (attendee) {
     grepl('vacations@polar.me', attendee)
 }
 
-events <- bind_rows(lapply(events_list_all, data.frame,
-                           stringsAsFactors = FALSE)) %>%
-    rename(organizer = organizer.email, creator = creator.email,
-           start_time = dateTime, end_time = dateTime.1) %>%
-    select(start_time, organizer, summary, calendar, description, creator,
-           location, end_time, contains('attendees.email'), id, iCalUID, etag) %>%
+# Tidying
+events <- events_df %>%
+    rename(start_dt = start_dateTime, end_dt = end_dateTime) %>%
     mutate_each(funs(is_ext_attendee = is_ext_attendee(.),
                      is_vacation_attendee = is_vacation_attendee(.)),
-                contains('attendees.email')) %>%
-    mutate(start_time = as.POSIXct(substr(start_time, 1, 19),
-                                   format = "%Y-%m-%dT%H:%M:%S",
-                                   tz = 'America/Toronto'),
-           yr_mo = as.yearmon(start_time),
-           day_of_week = weekdays(start_time),
+                contains('attendee')) %>%
+    mutate(start_dt = as.POSIXct(substr(start_dt, 1, 19),
+                                 format = "%Y-%m-%dT%H:%M:%S",
+                                 tz = 'America/Toronto'),
+           yr_mo = as.yearmon(start_dt),
+           day_of_week = weekdays(start_dt),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
            has_vacation_attendee = rowSums(
@@ -84,5 +129,6 @@ events <- bind_rows(lapply(events_list_all, data.frame,
 
 # Internal meetings
 int_mtgs <- events %>%
-    filter(!(is.na(attendees.email) | is_ext_mtg | is_vacation)) %>%
+    filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
+                 is_vacation)) %>%
     distinct(id, .keep_all = TRUE)

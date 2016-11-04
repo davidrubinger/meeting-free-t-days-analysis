@@ -118,6 +118,7 @@ events <- events_df %>%
                                  tz = 'America/Toronto'),
            yr_mo = as.yearmon(start_dt),
            day_of_week = weekdays(start_dt),
+           has_ext_organizer = is_ext_attendee(organizer_email),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
            has_vacation_attendee = rowSums(
@@ -130,5 +131,5 @@ events <- events_df %>%
 # Internal meetings
 int_mtgs <- events %>%
     filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
-                 is_vacation)) %>%
+                 has_ext_organizer | is_vacation)) %>%
     distinct(id, .keep_all = TRUE)

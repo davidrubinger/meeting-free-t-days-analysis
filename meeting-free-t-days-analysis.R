@@ -109,7 +109,9 @@ is_vacation_attendee <- function (attendee) {
 
 # Tidying
 events <- events_df %>%
-    rename(start_dt = start_dateTime, end_dt = end_dateTime) %>%
+    rename(start_dt = start_dateTime, end_dt = end_dateTime,
+           organizer_name = organizer_displayName,
+           creator_name = creator_displayName) %>%
     mutate_each(funs(is_ext_attendee = is_ext_attendee(.),
                      is_vacation_attendee = is_vacation_attendee(.)),
                 contains('attendee')) %>%
@@ -123,10 +125,17 @@ events <- events_df %>%
                select(., contains('is_ext_attendee'))) > 0,
            has_vacation_attendee = rowSums(
                select(., contains('is_vacation_attendee'))) > 0,
+           has_vacation_organizer = ifelse(
+               is.na(organizer_name) | organizer_name != 'Vacations',
+               FALSE, TRUE),
+           has_vacation_creator = ifelse(
+               is.na(creator_name) | creator_email != 'tempus.nova@polar.me',
+               FALSE, TRUE),
            has_vacation_location = ifelse(
                is.na(location) | location != 'Vacations', FALSE, TRUE),
-           is_vacation = ifelse(has_vacation_attendee | has_vacation_location,
-                                TRUE, FALSE))
+           is_vacation = ifelse(
+               has_vacation_attendee | has_vacation_location |
+                   has_vacation_organizer | has_vacation_creator, TRUE, FALSE))
 
 # Internal meetings
 int_mtgs <- events %>%

@@ -107,6 +107,10 @@ is_vacation_attendee <- function (attendee) {
     grepl('vacations@polar.me', attendee)
 }
 
+# Ad hoc non-internal meeting events to remove
+blacklisted_recurring_ids <- c(
+    '_89142ca36sq3eba174rk8b9k84s4cb9o60s38ba684o48d1n84qjccpk70')
+
 # Tidying
 events <- events_df %>%
     rename(start_dt = start_dateTime, end_dt = end_dateTime,
@@ -135,10 +139,11 @@ events <- events_df %>%
                is.na(location) | location != 'Vacations', FALSE, TRUE),
            is_vacation = ifelse(
                has_vacation_attendee | has_vacation_location |
-                   has_vacation_organizer | has_vacation_creator, TRUE, FALSE))
+                   has_vacation_organizer | has_vacation_creator, TRUE, FALSE),
+           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId))
 
 # Internal meetings
 int_mtgs <- events %>%
     filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
-                 has_ext_organizer | is_vacation)) %>%
+                 has_ext_organizer | is_vacation | blacklisted)) %>%
     distinct(id, .keep_all = TRUE)

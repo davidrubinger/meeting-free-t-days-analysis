@@ -178,3 +178,22 @@ hq_holidays <- gs_read(company_info, 'holidays') %>%
 
 summits <- gs_read(company_info, 'summits') %>%
     mutate(is_summit = TRUE)
+
+#### Aggregating ####
+# By day
+mtgs_day <- mtgs %>%
+    group_by(date = start_date) %>%
+    summarise(n_mtgs = n()) %>%
+    full_join(data_frame(date = seq(scope_start, scope_end, by = 'day')),
+              by = 'date') %>%
+    left_join(select(hq_holidays, date, is_holiday), by = 'date') %>%
+    left_join(select(summits, date, is_summit), by = 'date') %>%
+    replace_na(list(n_mtgs = 0, is_holiday = FALSE, is_summit = FALSE)) %>%
+    mutate(week = as.Date(cut(date, breaks = 'week')),
+           day_of_week = weekdays(date),
+           is_t_day = ifelse(day_of_week %in% c('Tuesday', 'Thursday'),
+                             TRUE, FALSE),
+           is_weekend = ifelse(day_of_week %in% c('Saturday', 'Sunday'),
+                               TRUE, FALSE),
+           is_reg_biz_day = ifelse(is_weekend == TRUE | is_holiday == TRUE |
+                                       is_summit == TRUE, FALSE, TRUE))

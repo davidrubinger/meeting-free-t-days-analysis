@@ -130,12 +130,6 @@ events <- events_df %>%
                                  tz = 'America/Toronto'),
            start_date = as.Date(ifelse(
                is.na(start_date), as.character(as.Date(start_dt)), start_date)),
-           week = as.Date(cut(start_date, breaks = 'week')),
-           day_of_week = weekdays(start_date),
-           is_t_day = ifelse(day_of_week %in% c('Tuesday', 'Thursday'),
-                             TRUE, FALSE),
-           is_weekend = ifelse(day_of_week %in% c('Saturday', 'Sunday'),
-                               TRUE, FALSE),
            has_ext_organizer = is_ext_attendee(organizer_email),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
@@ -165,6 +159,7 @@ scope_employees <- gs_read(company_info, 'directory') %>%
     filter(start_date <= scope_start & end_date >= scope_end &
                (dept != 'finance' | is.na(dept)))
 
+# Filtering
 mtgs <- events %>%
     filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
                  has_ext_organizer | is_vacation | blacklisted) &
@@ -172,14 +167,14 @@ mtgs <- events %>%
                organizer_email %in% scope_employees$email) %>%
     distinct(id, .keep_all = TRUE)
 
+#### Aggregating ####
+# Adding features
 hq_holidays <- gs_read(company_info, 'holidays') %>%
     filter(location %in% c('global', 'toronto')) %>%
     mutate(is_holiday = TRUE)
-
 summits <- gs_read(company_info, 'summits') %>%
     mutate(is_summit = TRUE)
 
-#### Aggregating ####
 # By day
 mtgs_day <- mtgs %>%
     group_by(date = start_date) %>%
@@ -195,19 +190,23 @@ mtgs_day <- mtgs %>%
                              TRUE, FALSE),
            is_weekend = ifelse(day_of_week %in% c('Saturday', 'Sunday'),
                                TRUE, FALSE),
-           is_reg_biz_day = ifelse(is_weekend == TRUE | is_holiday == TRUE |
-                                       is_summit == TRUE, FALSE, TRUE))
+           is_biz_day = ifelse(is_weekend == TRUE | is_holiday == TRUE,
+                               FALSE, TRUE))
+
+# By week, incl. only business days
+mtgs_wk_biz_days <- mtgs_day %>%
+    filter(is_biz_day) %>%
+    group_by(week, is_t_day) %>%
+    summarise(n_mtgs = sum(n_mtgs),
+              n_biz_days = sum(is_biz_day),
+              is_summit_week = ifelse(sum(is_summit) > 0, TRUE, FALSE)) %>%
+    mutate(n_mtgs = ifelse(is_summit_week, NA, n_mtgs),
+           n_mtgs_biz_day = n_mtgs / n_biz_days)
 
 #### Visualizing ####
 # By T-day/non-T-day and week
-mtgs_day %>%
-    filter(is_reg_biz_day) %>%
-    group_by(week, is_t_day) %>%
-    summarise(n_mtgs = sum(n_mtgs),
-              n_reg_biz_days = sum(is_reg_biz_day),
-              n_mtgs_reg_biz_day = n_mtgs / n_reg_biz_days) %>%
-    group_by(is_t_day) %>%
-    ggplot(aes(week, n_mtgs_reg_biz_day, color = is_t_day)) +
+mtgs_wk_biz_days %>%
+    ggplot(aes(week, n_mtgs_biz_day, color = is_t_day)) +
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +

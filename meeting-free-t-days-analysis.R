@@ -197,3 +197,19 @@ mtgs_day <- mtgs %>%
                                TRUE, FALSE),
            is_reg_biz_day = ifelse(is_weekend == TRUE | is_holiday == TRUE |
                                        is_summit == TRUE, FALSE, TRUE))
+
+#### Visualizing ####
+# By T-day/non-T-day and week
+mtgs_day %>%
+    filter(is_reg_biz_day) %>%
+    group_by(week, is_t_day) %>%
+    summarise(n_mtgs = sum(n_mtgs),
+              n_reg_biz_days = sum(is_reg_biz_day),
+              n_mtgs_reg_biz_day = n_mtgs / n_reg_biz_days) %>%
+    group_by(is_t_day) %>%
+    ggplot(aes(week, n_mtgs_reg_biz_day, color = is_t_day)) +
+    geom_line() +
+    geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
+               linetype = 'dashed') +
+    labs(title = 'Avg number of internal meetings for T-days and non-T-days by week')
+ggsave('mtgs-t-day-week.png')

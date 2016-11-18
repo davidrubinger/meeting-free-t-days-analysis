@@ -1,11 +1,15 @@
+#### Setting Environment ####
 # Using R version 3.3.2
 setwd('~/Documents/meeting-free-t-days-analysis')
+#source('credentials.R')
 library(httr)
+library(googlesheets)
 library(dplyr)
-library(zoo)
+library(tidyr)
+library(ggplot2)
+theme_set(theme_bw())
 
 #### Reading Google Calendar Data ####
-#source('credentials.R')
 my_app <- oauth_app('GOOGLE_APIS', key = my_app_key, secret = my_app_secret)
 google_token <- oauth2.0_token(
     oauth_endpoints('google'), my_app,
@@ -111,6 +115,8 @@ is_vacation_attendee <- function (attendee) {
 blacklisted_recurring_ids <- c(
     '_89142ca36sq3eba174rk8b9k84s4cb9o60s38ba684o48d1n84qjccpk70')
 
+policy_start_date <- as.Date('2016-01-04')
+
 # Tidying
 events <- events_df %>%
     rename(start_dt = start_dateTime, end_dt = end_dateTime,
@@ -122,8 +128,14 @@ events <- events_df %>%
     mutate(start_dt = as.POSIXct(substr(start_dt, 1, 19),
                                  format = "%Y-%m-%dT%H:%M:%S",
                                  tz = 'America/Toronto'),
-           yr_mo = as.yearmon(start_dt),
-           day_of_week = weekdays(start_dt),
+           start_date = as.Date(ifelse(
+               is.na(start_date), as.character(as.Date(start_dt)), start_date)),
+           week = as.Date(cut(start_date, breaks = 'week')),
+           day_of_week = weekdays(start_date),
+           is_t_day = ifelse(day_of_week %in% c('Tuesday', 'Thursday'),
+                             TRUE, FALSE),
+           is_weekend = ifelse(day_of_week %in% c('Saturday', 'Sunday'),
+                               TRUE, FALSE),
            has_ext_organizer = is_ext_attendee(organizer_email),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
@@ -140,10 +152,29 @@ events <- events_df %>%
            is_vacation = ifelse(
                has_vacation_attendee | has_vacation_location |
                    has_vacation_organizer | has_vacation_creator, TRUE, FALSE),
-           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId))
+           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId),
+           policy_ind = ifelse(start_date >= policy_start_date, 1, 0))
 
-# Internal meetings
-int_mtgs <- events %>%
+# Internal meetings used in analysis
+company_info <- gs_key(gs_id)
+scope_start <- as.Date('2015-07-27')
+scope_end <- as.Date('2016-07-17')
+scope_employees <- gs_read(company_info, 'directory') %>%
+    mutate(end_date = as.Date(ifelse(is.na(end_date), Sys.Date(), end_date),
+                              origin = '1970-01-01')) %>%
+    filter(start_date <= scope_start & end_date >= scope_end &
+               (dept != 'finance' | is.na(dept)))
+
+mtgs <- events %>%
     filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
-                 has_ext_organizer | is_vacation | blacklisted)) %>%
+                 has_ext_organizer | is_vacation | blacklisted) &
+               start_date >= scope_start & start_date <= scope_end &
+               organizer_email %in% scope_employees$email) %>%
     distinct(id, .keep_all = TRUE)
+
+hq_holidays <- gs_read(company_info, 'holidays') %>%
+    filter(location %in% c('global', 'toronto')) %>%
+    mutate(is_holiday = TRUE)
+
+summits <- gs_read(company_info, 'summits') %>%
+    mutate(is_summit = TRUE)

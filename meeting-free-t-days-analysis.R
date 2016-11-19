@@ -146,8 +146,7 @@ events <- events_df %>%
            is_vacation = ifelse(
                has_vacation_attendee | has_vacation_location |
                    has_vacation_organizer | has_vacation_creator, TRUE, FALSE),
-           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId),
-           policy_ind = ifelse(start_date >= policy_start_date, 1, 0))
+           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId))
 
 # Internal meetings used in analysis
 company_info <- gs_key(gs_id)
@@ -201,7 +200,9 @@ mtgs_wk_biz_days <- mtgs_day %>%
               n_biz_days = sum(is_biz_day),
               is_summit_week = ifelse(sum(is_summit) > 0, TRUE, FALSE)) %>%
     mutate(n_mtgs = ifelse(is_summit_week, NA, n_mtgs),
-           n_mtgs_biz_day = n_mtgs / n_biz_days)
+           n_mtgs_biz_day = n_mtgs / n_biz_days,
+           policy_ind = ifelse(is_summit_week, NA,
+                               ifelse(week >= policy_start_date, 1, 0)))
 
 #### Visualizing ####
 # By T-day/non-T-day and week
@@ -212,3 +213,27 @@ mtgs_wk_biz_days %>%
                linetype = 'dashed') +
     labs(title = 'Avg number of internal meetings for T-days and non-T-days by week')
 ggsave('mtgs-t-day-week.png')
+
+#### Box-Jenkins Methodology ####
+avg_mtgs_day_weekly <- mtgs_wk_biz_days %>%
+    filter(is_t_day) %>%
+    .$n_mtgs_biz_day
+policy_ind <- mtgs_wk_biz_days %>%
+    filter(is_t_day) %>%
+    .$policy_ind
+
+# Modelling
+acf(avg_mtgs_day_weekly, na.action = na.pass)
+pacf(avg_mtgs_day_weekly, na.action = na.pass)
+mod_arma <- Arima(avg_mtgs_day_weekly, order = c(1, 0, 0))
+
+# Assessment
+summary(mod_arma)
+acf(mod_arma$residuals, na.action = na.pass)
+pacf(mod_arma$residuals, na.action = na.pass)
+Box.test(mod_arma$residuals, lag = 25, type = 'Ljung-Box')
+
+#### Intervention Analysis ####
+# Using zero order transfer function
+mod_int <- Arima(avg_mtgs_day_weekly, order = c(1, 0, 0), xreg = policy_ind)
+summary(mod_int)

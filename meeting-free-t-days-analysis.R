@@ -7,6 +7,7 @@ library(googlesheets)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(forecast)
 theme_set(theme_bw())
 
 #### Reading Google Calendar Data ####
@@ -115,8 +116,6 @@ is_vacation_attendee <- function (attendee) {
 blacklisted_recurring_ids <- c(
     '_89142ca36sq3eba174rk8b9k84s4cb9o60s38ba684o48d1n84qjccpk70')
 
-policy_start_date <- as.Date('2016-01-04')
-
 # Tidying
 events <- events_df %>%
     rename(start_dt = start_dateTime, end_dt = end_dateTime,
@@ -152,9 +151,9 @@ events <- events_df %>%
 company_info <- gs_key(gs_id)
 scope_start <- as.Date('2015-07-27')
 scope_end <- as.Date('2016-07-17')
-scope_employees <- gs_read(company_info, 'directory') %>%
-    mutate(end_date = as.Date(ifelse(is.na(end_date), Sys.Date(), end_date),
-                              origin = '1970-01-01')) %>%
+employees <- gs_read(company_info, 'directory') %>%
+    mutate(end_date = as.Date(ifelse(is.na(end_date), Sys.Date(), end_date)))
+scope_employees <- employees %>%
     filter(start_date <= scope_start & end_date >= scope_end &
                (dept != 'finance' | is.na(dept)))
 
@@ -173,6 +172,17 @@ hq_holidays <- gs_read(company_info, 'holidays') %>%
     mutate(is_holiday = TRUE)
 summits <- gs_read(company_info, 'summits') %>%
     mutate(is_summit = TRUE)
+employee_tenures <- NULL
+for (i in 1:nrow(employees)) {
+    employee_tenure <- data_frame(
+        employee = employees$email[i],
+        date = with(employees, seq(start_date[i], end_date[i], by = 'day')))
+    employee_tenures <- bind_rows(employee_tenures, employee_tenure)
+}
+n_employees_day <- employee_tenures %>%
+    group_by(date) %>%
+    summarise(n_employees = n())
+policy_start_date <- as.Date('2016-01-04')
 
 # By day
 mtgs_day <- mtgs %>%
@@ -182,6 +192,7 @@ mtgs_day <- mtgs %>%
               by = 'date') %>%
     left_join(select(hq_holidays, date, is_holiday), by = 'date') %>%
     left_join(select(summits, date, is_summit), by = 'date') %>%
+    left_join(n_employees_day, by = 'date') %>%
     replace_na(list(n_mtgs = 0, is_holiday = FALSE, is_summit = FALSE)) %>%
     mutate(week = as.Date(cut(date, breaks = 'week')),
            day_of_week = weekdays(date),
@@ -198,42 +209,74 @@ mtgs_wk_biz_days <- mtgs_day %>%
     group_by(week, is_t_day) %>%
     summarise(n_mtgs = sum(n_mtgs),
               n_biz_days = sum(is_biz_day),
-              is_summit_week = ifelse(sum(is_summit) > 0, TRUE, FALSE)) %>%
-    mutate(n_mtgs = ifelse(is_summit_week, NA, n_mtgs),
-           n_mtgs_biz_day = n_mtgs / n_biz_days,
+              is_summit_week = ifelse(sum(is_summit) > 0, TRUE, FALSE),
+              avg_n_employees = mean(n_employees)) %>%
+    mutate(avg_n_mtgs_biz_day = n_mtgs / n_biz_days,
            policy_ind = ifelse(is_summit_week, NA,
-                               ifelse(week >= policy_start_date, 1, 0)))
+                               ifelse(week >= policy_start_date, 1, 0))) %>%
+    ungroup()
 
-#### Visualizing ####
-# By T-day/non-T-day and week
+# Plot by T-day/non-T-day and week
 mtgs_wk_biz_days %>%
-    ggplot(aes(week, n_mtgs_biz_day, color = is_t_day)) +
+    ggplot(aes(week, avg_n_mtgs_biz_day, color = is_t_day)) +
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
+    lims(y = c(0, 25)) +
     labs(title = 'Avg number of internal meetings for T-days and non-T-days by week')
 ggsave('mtgs-t-day-week.png')
 
-#### Box-Jenkins Methodology ####
-avg_mtgs_day_weekly <- mtgs_wk_biz_days %>%
-    filter(is_t_day) %>%
-    .$n_mtgs_biz_day
-policy_ind <- mtgs_wk_biz_days %>%
-    filter(is_t_day) %>%
-    .$policy_ind
+#### Time Series Analysis ####
+# Select day group
+mtgs_wk_biz_days_group <- filter(mtgs_wk_biz_days, is_t_day)
 
-# Modelling
-acf(avg_mtgs_day_weekly, na.action = na.pass)
-pacf(avg_mtgs_day_weekly, na.action = na.pass)
-mod_arma <- Arima(avg_mtgs_day_weekly, order = c(1, 0, 0))
-
-# Assessment
+# Box-Jenkins methodology
+acf(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day, na.action = na.pass)
+pacf(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day, na.action = na.pass)
+mod_arma <- Arima(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day, order = c(1, 0, 0))
 summary(mod_arma)
 acf(mod_arma$residuals, na.action = na.pass)
 pacf(mod_arma$residuals, na.action = na.pass)
 Box.test(mod_arma$residuals, lag = 25, type = 'Ljung-Box')
 
-#### Intervention Analysis ####
-# Using zero order transfer function
-mod_int <- Arima(avg_mtgs_day_weekly, order = c(1, 0, 0), xreg = policy_ind)
+# Intervention analysis
+mod_int <- Arima(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day,
+                 order = c(1, 0, 0), xreg = mtgs_wk_biz_days_group$policy_ind)
 summary(mod_int)
+fitted_mtgs <- data_frame(
+    week = mtgs_wk_biz_days_group$week,
+    avg_n_mtgs_biz_day = fitted(mod_int))
+
+# Plotting model fit for T-days
+t_day_fit_plot <- mtgs_wk_biz_days_group %>%
+    ggplot(aes(week, avg_n_mtgs_biz_day)) +
+    geom_line() +
+    geom_line(data = fitted_mtgs) +
+    geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
+               linetype = 'dashed') +
+    lims(y = c(0, 25)) +
+    labs(title = 'Avg number of internal meetings for T-days by week')
+
+# Non-T-days
+mtgs_wk_biz_days_group <- filter(mtgs_wk_biz_days, !is_t_day)
+
+mod_int <- Arima(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day,
+                 order = c(0, 0, 0), xreg = mtgs_wk_biz_days_group$policy_ind)
+summary(mod_int)
+fitted_mtgs <- data_frame(
+    week = mtgs_wk_biz_days_group$week,
+    avg_n_mtgs_biz_day = fitted(mod_int))
+
+# Plotting model fit for T-days
+non_t_day_fit_plot <- mtgs_wk_biz_days_group %>%
+    ggplot(aes(week, avg_n_mtgs_biz_day)) +
+    geom_line() +
+    geom_line(data = fitted_mtgs) +
+    geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
+               linetype = 'dashed') +
+    lims(y = c(0, 25)) +
+    labs(title = 'Avg number of internal meetings for non-T-days by week')
+
+library(gridExtra)
+fit_plots <- grid.arrange(t_day_fit_plot, non_t_day_fit_plot)
+ggsave('fit_plots.png', fit_plots)

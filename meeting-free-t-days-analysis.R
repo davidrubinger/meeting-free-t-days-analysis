@@ -280,3 +280,62 @@ non_t_day_fit_plot <- mtgs_wk_biz_days_group %>%
 library(gridExtra)
 fit_plots <- grid.arrange(t_day_fit_plot, non_t_day_fit_plot)
 ggsave('fit_plots.png', fit_plots)
+
+# By organizer and day
+mtgs_organizer_day <- mtgs %>%
+    group_by(date = start_date,
+             organizer = organizer_email) %>%
+    summarise(n_mtgs = n()) %>%
+    right_join(employee_tenures %>% filter(
+        date >= scope_start & date <= scope_end &
+            employee %in% scope_employees$email),
+        by = c('date' = 'date', 'organizer' = 'employee')) %>%
+    left_join(select(hq_holidays, date, is_holiday), by = 'date') %>%
+    left_join(select(summits, date, is_summit), by = 'date') %>%
+    replace_na(list(n_mtgs = 0, is_holiday = FALSE, is_summit = FALSE)) %>%
+    mutate(week = as.Date(cut(date, breaks = 'week')),
+           day_of_week = weekdays(date),
+           is_t_day = ifelse(day_of_week %in% c('Tuesday', 'Thursday'),
+                             TRUE, FALSE),
+           is_weekend = ifelse(day_of_week %in% c('Saturday', 'Sunday'),
+                               TRUE, FALSE),
+           is_biz_day = ifelse(is_weekend == TRUE | is_holiday == TRUE,
+                               FALSE, TRUE),
+           policy_ind = ifelse(is_summit, NA,
+                               ifelse(date >= policy_start_date, 1, 0)))
+
+# By organizer, day group and policy indicator, incl. only business days
+mtgs_organizer_group_ind <- mtgs_organizer_day %>%
+    filter(is_biz_day & !is_summit) %>%
+    group_by(organizer, is_t_day, policy_ind) %>%
+    summarise(n_mtgs = sum(n_mtgs),
+              n_biz_days = sum(is_biz_day)) %>%
+    group_by(is_t_day, policy_ind) %>%
+    mutate(avg_n_mtgs_biz_day = n_mtgs / n_biz_days,
+           mtgs_share = n_mtgs / sum(n_mtgs)) %>%
+    ungroup()
+
+# Visualizing
+top_n_employees <- 10
+plot_employees <- mtgs_organizer_group_ind %>%
+    group_by(organizer) %>%
+    summarise(n_mtgs = sum(n_mtgs)) %>%
+    top_n(top_n_employees, n_mtgs) %>%
+    select(organizer)
+
+# Plot
+mtgs_organizer_group_ind %>%
+    inner_join(plot_employees, by = 'organizer') %>%
+    mutate(is_t_day = factor(is_t_day, levels = c(TRUE, FALSE),
+                             labels = c('T-Day', 'Non-T-Day')),
+           policy_ind = factor(policy_ind, levels = c(0, 1),
+                               labels = c('Before', 'After'))) %>%
+    ggplot(aes(policy_ind, avg_n_mtgs_biz_day, group = organizer,
+               color = organizer)) +
+    facet_wrap(~ is_t_day) +
+    geom_point() +
+    geom_line() +
+    labs(title = paste('Average Meetings per Business Day Organized by Top',
+                       top_n_employees, 'Organizers')) +
+    guides(color = FALSE)
+ggsave('individuals-plot.png')

@@ -8,7 +8,7 @@ library(httr)
 library(dplyr)
 
 #### Read Google Calendar Data ####
-source('credentials.R')
+source('scripts/credentials.R')
 my_app <- oauth_app('GOOGLE_APIS', key = my_app_key, secret = my_app_secret)
 google_token <- oauth2.0_token(
     oauth_endpoints('google'), my_app,

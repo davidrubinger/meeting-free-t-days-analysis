@@ -1,6 +1,4 @@
 #### Setting Environment ####
-# Using R version 3.3.2
-source('~/Documents/meeting-free-t-days-analysis/load-data.R')
 library(googlesheets)
 library(tidyr)
 library(ggplot2)

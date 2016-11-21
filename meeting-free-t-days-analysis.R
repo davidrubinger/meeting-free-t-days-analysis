@@ -5,7 +5,13 @@ library(googlesheets)
 library(tidyr)
 library(ggplot2)
 library(forecast)
-theme_set(theme_bw())
+theme_set(theme_bw() +
+              theme(panel.border = element_blank(),
+                    panel.grid.major.x = element_blank(),
+                    panel.grid.minor.x = element_blank(),
+                    panel.grid.minor.y = element_blank(),
+                    axis.ticks.x = element_blank(),
+                    axis.ticks.y = element_blank()))
 
 #### Tidying Data ####
 list_element_to_df <- function (list_elements, element) {

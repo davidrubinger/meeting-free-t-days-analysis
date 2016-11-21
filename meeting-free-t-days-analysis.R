@@ -1,10 +1,7 @@
 #### Setting Environment ####
 # Using R version 3.3.2
-setwd('~/Documents/meeting-free-t-days-analysis')
-#source('credentials.R')
-library(httr)
+source('~/Documents/meeting-free-t-days-analysis/load-data.R')
 library(googlesheets)
-library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(forecast)

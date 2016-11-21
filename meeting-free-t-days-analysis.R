@@ -174,14 +174,21 @@ mtgs_wk_biz_days <- mtgs_day %>%
     ungroup()
 
 # Plot by T-day/non-T-day and week
+col_palette <- c('deepskyblue4', 'lightskyblue')
 mtgs_wk_biz_days %>%
+    mutate(is_t_day = factor(is_t_day, levels = c(TRUE, FALSE),
+                             labels = c('T-Day', 'Non-T-Day'))) %>%
     ggplot(aes(week, avg_n_mtgs_biz_day, color = is_t_day)) +
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
+             label = 'Policy Start Date') +
     lims(y = c(0, 25)) +
-    labs(title = 'Avg number of internal meetings for T-days and non-T-days by week')
-ggsave('mtgs-t-day-week.png')
+    labs(x = '', y = 'Meetings per Day', color = '',
+         title = 'Average Number of Meetings for T-Days and Non-T-Days by Week') +
+    scale_color_manual(values = col_palette)
+ggsave('mtgs-day-group-week.png')
 
 #### Time Series Analysis ####
 # Select day group
@@ -196,7 +203,7 @@ acf(mod_arma$residuals, na.action = na.pass)
 pacf(mod_arma$residuals, na.action = na.pass)
 Box.test(mod_arma$residuals, lag = 25, type = 'Ljung-Box')
 
-# Intervention analysis
+# Intervention analysis - T-days
 mod_int <- Arima(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day,
                  order = c(1, 0, 0), xreg = mtgs_wk_biz_days_group$policy_ind)
 summary(mod_int)
@@ -205,16 +212,29 @@ fitted_mtgs <- data_frame(
     avg_n_mtgs_biz_day = fitted(mod_int))
 
 # Plotting model fit for T-days
-t_day_fit_plot <- mtgs_wk_biz_days_group %>%
-    ggplot(aes(week, avg_n_mtgs_biz_day)) +
+col_palette <- c('deepskyblue4', 'red')
+mtgs_wk_biz_days_group %>%
+    left_join(
+        rename(fitted_mtgs, avg_n_mtgs_biz_day_fitted = avg_n_mtgs_biz_day),
+        by = 'week') %>%
+    select(week, avg_n_mtgs_biz_day, avg_n_mtgs_biz_day_fitted) %>%
+    gather(type, value, -week) %>%
+    mutate(type = factor(type, levels = c('avg_n_mtgs_biz_day',
+                                          'avg_n_mtgs_biz_day_fitted'),
+                         labels = c('Actual Data', 'Model Fit'))) %>%
+    ggplot(aes(week, value, color = type)) +
     geom_line() +
-    geom_line(data = fitted_mtgs) +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
+             label = 'Policy Start Date') +
     lims(y = c(0, 25)) +
-    labs(title = 'Avg number of internal meetings for T-days by week')
+    labs(x = '', y = 'Meetings per Day', color = '',
+         title = 'Average Number of Meetings for T-Days and Model Fit by Week') +
+    scale_color_manual(values = col_palette)
+ggsave('t_day_fit_plot.png')
 
-# Non-T-days
+# Intervention analysis - non-T-days
 mtgs_wk_biz_days_group <- filter(mtgs_wk_biz_days, !is_t_day)
 
 mod_int <- Arima(mtgs_wk_biz_days_group$avg_n_mtgs_biz_day,
@@ -224,20 +244,30 @@ fitted_mtgs <- data_frame(
     week = mtgs_wk_biz_days_group$week,
     avg_n_mtgs_biz_day = fitted(mod_int))
 
-# Plotting model fit for T-days
-non_t_day_fit_plot <- mtgs_wk_biz_days_group %>%
-    ggplot(aes(week, avg_n_mtgs_biz_day)) +
+# Plotting model fit for non-T-days
+col_palette <- c('lightskyblue', 'red')
+mtgs_wk_biz_days_group %>%
+    left_join(
+        rename(fitted_mtgs, avg_n_mtgs_biz_day_fitted = avg_n_mtgs_biz_day),
+        by = 'week') %>%
+    select(week, avg_n_mtgs_biz_day, avg_n_mtgs_biz_day_fitted) %>%
+    gather(type, value, -week) %>%
+    mutate(type = factor(type, levels = c('avg_n_mtgs_biz_day',
+                                          'avg_n_mtgs_biz_day_fitted'),
+                         labels = c('Actual Data', 'Model Fit'))) %>%
+    ggplot(aes(week, value, color = type)) +
     geom_line() +
-    geom_line(data = fitted_mtgs) +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
+             label = 'Policy Start Date') +
     lims(y = c(0, 25)) +
-    labs(title = 'Avg number of internal meetings for non-T-days by week')
+    labs(x = '', y = 'Meetings per Day', color = '',
+         title = 'Average Number of Meetings for Non-T-Days and Model Fit by Week') +
+    scale_color_manual(values = col_palette)
+ggsave('non_t_day_fit_plot.png')
 
-library(gridExtra)
-fit_plots <- grid.arrange(t_day_fit_plot, non_t_day_fit_plot)
-ggsave('fit_plots.png', fit_plots)
-
+#### Individual-Level Analysis ####
 # By organizer and day
 mtgs_organizer_day <- mtgs %>%
     group_by(date = start_date,
@@ -292,7 +322,9 @@ mtgs_organizer_group_ind %>%
     facet_wrap(~ is_t_day) +
     geom_point() +
     geom_line() +
-    labs(title = paste('Average Meetings per Business Day Organized by Top',
-                       top_n_employees, 'Organizers')) +
-    guides(color = FALSE)
+    labs(x = 'Policy Implementation', y = 'Meetings per Day',
+         title = paste('Average Number of Meetings per Day by Organizer\n(Top',
+                       top_n_employees, 'Meeting Organizers Only)')) +
+    guides(color = FALSE) +
+    scale_color_hue(h = c(100, 360))
 ggsave('individuals-plot.png')

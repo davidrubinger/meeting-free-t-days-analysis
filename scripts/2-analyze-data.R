@@ -2,6 +2,7 @@
 library(googlesheets)
 library(tidyr)
 library(ggplot2)
+library(lubridate)
 library(forecast)
 theme_set(theme_bw() +
               theme(panel.border = element_blank(),
@@ -72,7 +73,7 @@ company_info <- gs_key(gs_id)
 blacklisted_terms <- gs_read(company_info, 'meeting_summary_blacklist') %>%
     .$term
 
-# Tidying
+# Tidying and creating features
 events <- events_df %>%
     rename(start_dt = start_dateTime, end_dt = end_dateTime,
            organizer_name = organizer_displayName,
@@ -85,12 +86,15 @@ events <- events_df %>%
                                  tz = 'America/Toronto'),
            start_date = as.Date(ifelse(
                is.na(start_date), as.character(as.Date(start_dt)), start_date)),
+           start_hr = hour(start_dt),
            is_personal_event = is.na(attendees_attendee_1) |
                (is.na(attendees_attendee_2) &
                     attendees_attendee_1 == organizer_email),
            has_ext_organizer = is_ext_attendee(organizer_email),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
+           is_after_hrs = ifelse((start_hr >= 9 & start_hr < 17) |
+                                     is.na(start_hr), FALSE, TRUE),
            has_vacation_attendee = rowSums(
                select(., contains('is_vacation_attendee'))) > 0,
            has_vacation_organizer = ifelse(
@@ -119,7 +123,8 @@ scope_employees <- employees %>%
 # Filtering
 mtgs <- events %>%
     filter(!(is.na(start_dt) | is_personal_event | is_ext_mtg |
-                 has_ext_organizer | is_vacation | blacklisted) &
+                 has_ext_organizer | is_after_hrs | is_vacation |
+                 blacklisted) &
                start_date >= scope_start & start_date <= scope_end &
                organizer_email %in% scope_employees$email) %>%
     distinct(id, .keep_all = TRUE)

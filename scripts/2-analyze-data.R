@@ -85,6 +85,9 @@ events <- events_df %>%
                                  tz = 'America/Toronto'),
            start_date = as.Date(ifelse(
                is.na(start_date), as.character(as.Date(start_dt)), start_date)),
+           is_personal_event = is.na(attendees_attendee_1) |
+               (is.na(attendees_attendee_2) &
+                    attendees_attendee_1 == organizer_email),
            has_ext_organizer = is_ext_attendee(organizer_email),
            is_ext_mtg = rowSums(
                select(., contains('is_ext_attendee'))) > 0,
@@ -115,7 +118,7 @@ scope_employees <- employees %>%
 
 # Filtering
 mtgs <- events %>%
-    filter(!(is.na(attendees_attendee_1) | is.na(start_dt) | is_ext_mtg |
+    filter(!(is.na(start_dt) | is_personal_event | is_ext_mtg |
                  has_ext_organizer | is_vacation | blacklisted) &
                start_date >= scope_start & start_date <= scope_end &
                organizer_email %in% scope_employees$email) %>%

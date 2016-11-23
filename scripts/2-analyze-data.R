@@ -335,3 +335,17 @@ mtgs_organizer_group_ind %>%
     guides(color = FALSE) +
     scale_color_hue(h = c(100, 360))
 ggsave('individuals-plot.png')
+
+# Individual changes in meeting organizing behaviour on T-days
+mtgs_organizer_group_ind %>%
+    filter(is_t_day) %>%
+    select(organizer, policy_ind, avg_n_mtgs_biz_day) %>%
+    spread(policy_ind, avg_n_mtgs_biz_day) %>%
+    mutate(change_avg_n_mtgs_biz_day = `1` - `0`)
+
+# Individual changes in meeting organizing behaviour on non-T-days
+mtgs_organizer_group_ind %>%
+    filter(!is_t_day) %>%
+    select(organizer, policy_ind, avg_n_mtgs_biz_day) %>%
+    spread(policy_ind, avg_n_mtgs_biz_day) %>%
+    mutate(change_avg_n_mtgs_biz_day = `1` - `0`)

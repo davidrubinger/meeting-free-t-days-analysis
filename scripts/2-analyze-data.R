@@ -68,8 +68,9 @@ is_vacation_attendee <- function (attendee) {
 }
 
 # Ad hoc non-internal meeting events to remove
-blacklisted_recurring_ids <- c(
-    '_89142ca36sq3eba174rk8b9k84s4cb9o60s38ba684o48d1n84qjccpk70')
+company_info <- gs_key(gs_id)
+blacklisted_terms <- gs_read(company_info, 'meeting_summary_blacklist') %>%
+    .$term
 
 # Tidying
 events <- events_df %>%
@@ -100,10 +101,10 @@ events <- events_df %>%
            is_vacation = ifelse(
                has_vacation_attendee | has_vacation_location |
                    has_vacation_organizer | has_vacation_creator, TRUE, FALSE),
-           blacklisted = grepl(blacklisted_recurring_ids, recurringEventId))
+           blacklisted = grepl(paste(blacklisted_terms, collapse = '|'),
+                               summary, ignore.case = TRUE))
 
 # Internal meetings used in analysis
-company_info <- gs_key(gs_id)
 scope_start <- as.Date('2015-07-27')
 scope_end <- as.Date('2016-07-17')
 employees <- gs_read(company_info, 'directory') %>%

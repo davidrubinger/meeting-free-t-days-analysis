@@ -10,7 +10,14 @@ theme_set(theme_bw() +
                     panel.grid.minor.x = element_blank(),
                     panel.grid.minor.y = element_blank(),
                     axis.ticks.x = element_blank(),
-                    axis.ticks.y = element_blank()))
+                    axis.ticks.y = element_blank(),
+                    plot.title = element_text(size = rel(1.5)),
+                    axis.text = element_text(size = rel(1.1)),
+                    axis.title = element_text(size = rel(1.2)),
+                    legend.text = element_text(size = rel(1.2)),
+                    strip.background = element_rect(fill = 'gray95',
+                                                    color = 'gray95'),
+                    strip.text = element_text(size = rel(1.2))))
 
 #### Tidying Data ####
 list_element_to_df <- function (list_elements, element) {
@@ -189,13 +196,14 @@ mtgs_wk_biz_days %>%
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
-    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
-             label = 'Policy Start Date') +
-    lims(y = c(0, 25)) +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 17.5,
+             label = 'Policy Start Date', size = 5) +
+    lims(y = c(0, 20)) +
     labs(x = '', y = 'Meetings per Day', color = '',
-         title = 'Average Number of Meetings for T-Days and Non-T-Days by Week') +
+         title = 'Average Number of Meetings on T-Days and Non-T-Days by Week') +
     scale_color_manual(values = col_palette)
-ggsave('mtgs-day-group-week.png')
+ggsave('plots/mtgs-day-group-week.png', units = 'mm', width = 265,
+       height = 140)
 
 #### Time Series Analysis ####
 # Select day group
@@ -233,13 +241,14 @@ mtgs_wk_biz_days_group %>%
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
-    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
-             label = 'Policy Start Date') +
-    lims(y = c(0, 25)) +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 17.5,
+             label = 'Policy Start Date', size = 5) +
+    lims(y = c(0, 20)) +
     labs(x = '', y = 'Meetings per Day', color = '',
-         title = 'Average Number of Meetings for T-Days and Model Fit by Week') +
+         title = 'Average Number of Meetings on T-Days and Model Fit by Week') +
     scale_color_manual(values = col_palette)
-ggsave('t_day_fit_plot.png')
+ggsave('plots/t-day-fit-plot.png', units = 'mm', width = 265,
+       height = 140)
 
 # Intervention analysis - non-T-days
 mtgs_wk_biz_days_group <- filter(mtgs_wk_biz_days, !is_t_day)
@@ -266,13 +275,14 @@ mtgs_wk_biz_days_group %>%
     geom_line() +
     geom_vline(xintercept = as.numeric(policy_start_date), color = 'gray',
                linetype = 'dashed') +
-    annotate('text', x = as.Date(policy_start_date) + 40, y = 23,
-             label = 'Policy Start Date') +
-    lims(y = c(0, 25)) +
+    annotate('text', x = as.Date(policy_start_date) + 40, y = 17.5,
+             label = 'Policy Start Date', size = 5) +
+    lims(y = c(0, 20)) +
     labs(x = '', y = 'Meetings per Day', color = '',
-         title = 'Average Number of Meetings for Non-T-Days and Model Fit by Week') +
+         title = 'Average Number of Meetings on Non-T-Days and Model Fit by Week') +
     scale_color_manual(values = col_palette)
-ggsave('non_t_day_fit_plot.png')
+ggsave('plots/non-t-day-fit-plot.png', units = 'mm', width = 265,
+       height = 140)
 
 #### Individual-Level Analysis ####
 # By organizer and day
@@ -329,12 +339,13 @@ mtgs_organizer_group_ind %>%
     facet_wrap(~ is_t_day) +
     geom_point() +
     geom_line() +
-    labs(x = 'Policy Implementation', y = 'Meetings per Day',
+    labs(x = 'Policy Implementation Status', y = 'Meetings per Day',
          title = paste('Average Number of Meetings per Day by Organizer\n(Top',
                        top_n_employees, 'Meeting Organizers Only)')) +
     guides(color = FALSE) +
     scale_color_hue(h = c(100, 360))
-ggsave('individuals-plot.png')
+ggsave('plots/individuals-plot.png', units = 'mm', width = 265,
+       height = 140)
 
 # Individual changes in meeting organizing behaviour on T-days
 mtgs_organizer_group_ind %>%
